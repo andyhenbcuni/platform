@@ -1,0 +1,45 @@
+[project]
+name = "pipelines"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "jinja2>=3.1.5",
+    "networkx>=3.4.2",
+    "flake8>=7.0.0",
+    "black>=24.2.0",
+    "isort>=5.13.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.1.0",
+    "pyright>=1.1.395",
+    "pytest>=8.3.4",
+]
+airflow-compiler = [
+    "apache-airflow>=2.10.4",
+    "apache-airflow-providers-cncf-kubernetes>=10.1.0",
+    "apache-airflow-providers-google>=12.0.0",
+    "apache-airflow-providers-slack>=9.0.0",
+    "kubernetes>=31.0.0",
+    "slack-sdk>=3.34.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipelines"]
+include = ["src/pipelines/**"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/pipelines/**"]
+
+[tool.hatch.build]
+exclude = ["tests/**"]

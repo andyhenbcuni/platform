@@ -1,0 +1,155 @@
+#@ load("@ytt:data", "data")
+
+#@ def short_name(name):
+#@   return name.replace("deploy/", "").replace("_", "-").replace("/", "-")
+#@ end
+---
+#@ main_branch = "main"
+#@ tooling_repo = "techops-ci-tools"
+#@ pr_checks_job = "pr-checks"
+#@ concourse_container_tag = "pyenv-1.2"
+
+#@ build_job = "build-push-module"
+
+groups:
+  #@ for branch in data.values.branches:
+  - name: #@ short_name(branch)
+    jobs:
+      -  #@ "{}.{}".format(build_job, short_name(branch))
+  #@ end
+  - name: #@ pr_checks_job
+    jobs:
+      -  #@ pr_checks_job
+
+jobs:
+  #@ repo_name = "git-repo-pr"
+
+  - name: #@ pr_checks_job
+    plan:
+      - get: #@ repo_name
+        trigger: true
+        version: every
+
+      - put: #@ repo_name
+        params:
+          path: #@ repo_name
+          status: pending
+          context: #@ pr_checks_job
+
+      - in_parallel:
+          - task: sort-imports-format-linting
+            config:
+              platform: linux
+              image_resource:
+                type: registry-image
+                source:
+                  repository: us-docker.pkg.dev/res-nbcupea-mgmt-003/decision-sciences/rex-python
+                  tag: #@ concourse_container_tag
+                  username: _json_key
+                  password: ((ds-keys/gcp-json-key-sre-terraform-admin-ds-stable-int-001))
+              params:
+                SCRIPT_FILE: "cd-scripts/sort-imports-format-linting.sh"
+                SCRIPT_LINE: ""
+                GCP_CREDENTIALS_JSON: ""
+                GIT_TOKEN: ((git-access-token-nbcudtc))
+              inputs:
+                - name: #@ repo_name
+              run:
+                path: bash
+                dir: #@ repo_name
+                args: ["ci/scripts/init.sh"]
+
+        # - task: test-coverage
+        #   config:
+        #     platform: linux
+        #     image_resource:
+        #       type: registry-image
+        #       source:
+        #         repository: us-docker.pkg.dev/res-nbcupea-mgmt-003/decision-sciences/rex-python
+        #         tag: #@ concourse_container_tag
+        #         username: _json_key
+        #         password: ((ds-keys/gcp-json-key-sre-terraform-admin-ds-stable-int-001))
+        #     params:
+        #       SCRIPT_FILE: "cd-scripts/test-coverage.sh"
+        #       SCRIPT_LINE: ""
+        #       GCP_CREDENTIALS_JSON: ""
+        #     inputs:
+        #       - name: #@ repo_name
+        #     run:
+        #       path: bash
+        #       dir: #@ repo_name
+        #       args: ["ci/scripts/init.sh"]
+
+        on_failure:
+          put: #@ repo_name
+          params:
+            path: #@ repo_name
+            status: failure
+            context: #@ pr_checks_job
+
+      - put: #@ repo_name
+        params:
+          path: #@ repo_name
+          status: success
+          context: #@ pr_checks_job
+
+  #@ for branch in data.values.branches:
+
+  #@ repo_name = "git-repo-" + short_name(branch)
+  #@ job = "{}.{}".format(build_job, short_name(branch))
+
+  - name: #@ job
+    plan:
+      - get: #@ repo_name
+        trigger: #@ True if branch == main_branch else False
+
+      - task: push-module-to-ar
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: us-docker.pkg.dev/res-nbcupea-mgmt-003/decision-sciences/rex-python
+              tag: #@ concourse_container_tag
+              username: _json_key
+              password: ((ds-keys/gcp-json-key-sre-terraform-admin-ds-stable-int-001))
+          params:
+            SCRIPT_FILE: "cd-scripts/run_publish.sh"
+            GCP_CREDENTIALS_JSON: ((container-registry-rw-sa))
+            SCRIPT_LINE: ""
+            GIT_TOKEN: ((git-access-token-nbcudtc))
+            CURRENT_BRANCH: #@ branch
+          inputs:
+            - name: #@ repo_name
+          run:
+            path: bash
+            dir: #@ repo_name
+            args: ["ci/scripts/init.sh"]
+#@ end
+
+resources:
+  #@ for branch in data.values.branches:
+  - name: #@ "git-repo-" + short_name(branch)
+    type: git
+    icon: git
+    webhook_token: ((concourse-webhook-token))
+    source:
+      uri: https://github.com/NBCUDTC/ds-rex-pypi-src.git
+      branch: #@ branch
+      username: ((git-access-token-nbcudtc))
+      password: x-oauth-basic
+  #@ end
+  - name: git-repo-pr
+    type: pull-request
+    icon: git
+    webhook_token: ((concourse-webhook-token))
+    source:
+      access_token: ((git-access-token-nbcudtc))
+      repository: NBCUDTC/ds-rex-pypi-src
+
+resource_types:
+  - name: pull-request
+    type: docker-image
+    source:
+      repository: teliaoss/github-pr-resource
+      tag: v0.21.0

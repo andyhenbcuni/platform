@@ -1,0 +1,65 @@
+#@ load("@ytt:data", "data")
+---
+#@ repo_name = "git-repo-main"
+#@ branches_resource = "git-branches"
+#@ main_branch = "main"
+
+jobs:
+  - name: tracker
+    plan:
+      - in_parallel:
+          - get: #@ repo_name
+            trigger: true
+          - get: #@ branches_resource
+            trigger: true
+          - get: tooling-repo
+
+      - task: tracker
+        file: tooling-repo/tracker-pipeline-config/config.yaml
+
+        input_mapping:
+          git-repo: #@ repo_name
+          git-branches: #@ branches_resource
+
+      - load_var: pipelines-list
+        file: output/pipelines-list.yml
+
+      - across:
+          - var: pipeline_name
+            values: ((.:pipelines-list))
+        set_pipeline: ((.:pipeline_name))
+        file: output/((.:pipeline_name)).yml
+
+resources:
+  - name: #@ repo_name
+    type: git
+    icon: git
+    webhook_token: ((concourse-webhook-token))
+    source:
+      uri: https://github.com/NBCUDTC/mgds-pipelines-library-src.git
+      branch: #@ main_branch
+      username: ((git-access-token-nbcudtc))
+      password: x-oauth-basic
+  - name: #@ branches_resource
+    type: git-branches
+    icon: git
+    webhook_token: ((concourse-webhook-token))
+    source:
+      uri: https://github.com/NBCUDTC/mgds-pipelines-library-src.git
+      username: ((git-access-token-nbcudtc))
+      password: x-oauth-basic
+      branch_regex: "^main$|^deploy/.+"
+  - name: tooling-repo
+    type: git
+    icon: git
+    source:
+      uri: https://github.com/206752020_nbcuni/ds-concourse-tooling.git
+      branch: vlad/refactorBuildTasks
+      username: ((git-access-token-nbcudtc))
+      password: x-oauth-basic
+
+resource_types:
+  - name: git-branches
+    type: registry-image
+    source:
+      repository: aoldershaw/git-branches-resource

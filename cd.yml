@@ -1,0 +1,41 @@
+---
+techopsCiVer: 1
+
+ALLOW_MULTI_BRANCH_DEPLOY: true
+
+pipelines:
+  mgds-pipelines-library:
+    jobs:
+      build-push-module:
+        autoTriggerFrom: [mainBranch]
+        allowedBranches: [devBranch, mainBranch]
+        tasks:
+          - type: bash
+            name: push-module-to-ar
+            buildContainer: us-docker.pkg.dev/res-nbcupea-mgmt-003/decision-sciences/rex-python:pyenv-1.2
+            params:
+              GIT_TOKEN: ((ds-keys-manual/git-access-token-nbcudtc))
+              SCRIPT_FILE: cd-scripts/run_publish.sh
+              GCP_CREDENTIALS_JSON: ((ds-keys/container-registry-rw-sa))
+            entryPoint: cd-scripts/init.sh
+    pr-checks:
+      parallelTasks:
+        - type: bash
+          name: sort-imports-format-linting
+          buildContainer: us-docker.pkg.dev/res-nbcupea-mgmt-003/decision-sciences/rex-python:pyenv-1.2
+          params:
+            SCRIPT_FILE: "cd-scripts/sort-imports-format-linting.sh"
+            GIT_TOKEN: ((ds-keys-manual/git-access-token-nbcudtc))
+          entryPoint: cd-scripts/init.sh
+        # - type: bash
+        #   name: test-coverage
+        #   buildContainer: us-docker.pkg.dev/res-nbcupea-mgmt-003/decision-sciences/rex-python:pyenv-1.2
+        #   params:
+        #     SCRIPT_FILE: "cd-scripts/test-coverage.sh"
+        #   entryPoint: cd-scripts/init.sh
+
+resources:
+  sourceRepo:
+    name: mgds-pipelines-library
+    uri: https://github.com/NBCUDTC/mgds-pipelines-library-src.git
+    mainBranch: main
